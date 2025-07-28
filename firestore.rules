@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper: is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper: is the user the owner of the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Users: Only allow users to read/write their own user document
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Participants: Allow users to read/write participants they own
+    // Assuming participants have a 'userId' field to identify ownership
+    match /participants/{participantId} {
+      allow read, write: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || 
+         request.data.userId == request.auth.uid);
+      allow create: if isAuthenticated();
+    }
+
+    // Wheels: Allow users to read/write wheels they own
+    // Assuming wheels have a 'createdBy' or 'userId' field
+    match /wheels/{wheelId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && 
+        (resource.data.createdBy == request.auth.uid || 
+         request.data.createdBy == request.auth.uid);
+      allow create: if isAuthenticated();
+      
+      // Subcollections (e.g., history, reactions)
+      match /{subcollection=**} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // WheelSpins: Allow users to read/write their own spins
+    match /wheelSpins/{spinId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || 
+         request.data.userId == request.auth.uid);
+      allow create: if isAuthenticated();
+    }
+
+    // Data Privacy Consent: Allow users to read/write their own consent
+    match /dataPrivacyConsent/{documentId} {
+      // Allow reading if the document ID matches the user ID or if the document belongs to the user
+      allow read: if isAuthenticated() && 
+        (documentId == request.auth.uid || 
+         resource.data.userId == request.auth.uid);
+      allow write: if isAuthenticated() && 
+        (documentId == request.auth.uid || 
+         resource.data.userId == request.auth.uid ||
+         request.data.userId == request.auth.uid);
+      allow create: if isAuthenticated();
+    }
+
+    // Sent Notifications: Allow users to read their own notifications
+    match /sentNotifications/{notificationId} {
+      allow read: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || 
+         resource.data.recipientId == request.auth.uid);
+      allow write: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || 
+         request.data.userId == request.auth.uid);
+      allow create: if isAuthenticated();
+    }
+
+    // Topics/Projects: Allow authenticated users to read/write
+    match /topics/{topicId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && 
+        (resource.data.createdBy == request.auth.uid || 
+         request.data.createdBy == request.auth.uid);
+      allow create: if isAuthenticated();
+    }
+    
+    match /projects/{projectId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && 
+        (resource.data.createdBy == request.auth.uid || 
+         request.data.createdBy == request.auth.uid);
+      allow create: if isAuthenticated();
+    }
+
+    // Catch-all: block everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
